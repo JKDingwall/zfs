@@ -1109,7 +1109,7 @@ zfsctl_init(void)
 	    se_node_objsetid));
 	mutex_init(&zfs_snapshot_lock, NULL, MUTEX_DEFAULT, NULL);
 
-	zfs_expire_taskq = taskq_create("z_unmount", 1, defclsyspri,
+	zfs_expire_taskq = taskq_create("z_unmount", 1, maxclsyspri,
 	    1, 8, TASKQ_PREPOPULATE);
 }
 
