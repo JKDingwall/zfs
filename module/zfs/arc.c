@@ -3030,9 +3030,6 @@ arc_hdr_destroy(arc_buf_hdr_t *hdr)
 	ASSERT(!HDR_IO_IN_PROGRESS(hdr));
 	ASSERT(!HDR_IN_HASH_TABLE(hdr));
 
-	if (!HDR_EMPTY(hdr))
-		buf_discard_identity(hdr);
-
 	if (HDR_HAS_L2HDR(hdr)) {
 		l2arc_dev_t *dev = hdr->b_l2hdr.b_dev;
 		boolean_t buflist_held = MUTEX_HELD(&dev->l2ad_mtx);
@@ -3065,6 +3062,15 @@ arc_hdr_destroy(arc_buf_hdr_t *hdr)
 		if (hdr->b_l1hdr.b_pabd != NULL)
 			arc_hdr_free_pabd(hdr);
 	}
+
+	/*
+	 * The header's identify cannot be discarded until it has been
+	 * removed from both the hash table and l2arc header list.  This
+	 * ensures that if l2arc_evict() is running concurrently the right
+	 * hash lock will be used.
+	 */
+	if (!HDR_EMPTY(hdr))
+		buf_discard_identity(hdr);
 
 	ASSERT3P(hdr->b_hash_next, ==, NULL);
 	if (HDR_HAS_L1HDR(hdr)) {
@@ -6043,8 +6049,8 @@ arc_write_done(zio_t *zio)
 				ASSERT(zfs_refcount_is_zero(
 				    &exists->b_l1hdr.b_refcnt));
 				arc_change_state(arc_anon, exists, hash_lock);
-				mutex_exit(hash_lock);
 				arc_hdr_destroy(exists);
+				mutex_exit(hash_lock);
 				exists = buf_hash_insert(hdr, &hash_lock);
 				ASSERT3P(exists, ==, NULL);
 			} else if (zio->io_flags & ZIO_FLAG_NOPWRITE) {
@@ -7333,6 +7339,7 @@ top:
 	for (hdr = list_tail(buflist); hdr; hdr = hdr_prev) {
 		hdr_prev = list_prev(buflist, hdr);
 
+		ASSERT(!HDR_EMPTY(hdr));
 		hash_lock = HDR_LOCK(hdr);
 
 		/*
