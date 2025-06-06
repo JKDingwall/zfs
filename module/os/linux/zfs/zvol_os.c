@@ -1704,7 +1704,12 @@ out_doi:
 void
 zvol_os_rename_minor(zvol_state_t *zv, const char *newname)
 {
-	int readonly = get_disk_ro(zv->zv_zso->zvo_disk);
+	struct gendisk *zvo_disk = zv->zv_zso->zvo_disk;
+	struct block_device *part;
+	struct device *block_dev;
+	unsigned long idx;
+
+	int readonly = get_disk_ro(zvo_disk);
 
 	ASSERT(RW_LOCK_HELD(&zvol_state_lock));
 	ASSERT(MUTEX_HELD(&zv->zv_state_lock));
@@ -1724,8 +1729,20 @@ zvol_os_rename_minor(zvol_state_t *zv, const char *newname)
 	 * changes.  This would normally be done using kobject_uevent() but
 	 * that is a GPL-only symbol which is why we need this workaround.
 	 */
-	set_disk_ro(zv->zv_zso->zvo_disk, !readonly);
-	set_disk_ro(zv->zv_zso->zvo_disk, readonly);
+	set_disk_ro(zvo_disk, !readonly);
+	set_disk_ro(zvo_disk, readonly);
+
+	rcu_read_lock_sched();
+	xa_for_each(&zvo_disk->part_tbl, idx, part) {
+		if (!kobject_get_unless_zero(&part->bd_device.kobj))
+			continue;
+		rcu_read_unlock_sched();
+		spl_signal_kobj_evt(part);
+		block_dev = &part->bd_device;
+		kobject_put(&block_dev->kobj);
+		rcu_read_lock_sched();
+	}
+	rcu_read_unlock_sched();
 
 	dataset_kstats_rename(&zv->zv_kstat, newname);
 }
