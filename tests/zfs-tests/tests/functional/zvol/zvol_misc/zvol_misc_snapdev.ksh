@@ -121,15 +121,19 @@ blockdev_exists $SNAPDEV
 log_must zfs destroy $SNAP
 
 # 4. Verify "rename" is correctly reflected when "snapdev=visible"
-# 4.1 First create a snapshot and verify the device is present
+# 4.1 add a partition table to the zvol
+log_must verify_partition $ZDEV
+# 4.2 First create a snapshot and verify the device is present
 log_must zfs snapshot $SNAP
 log_must zfs set snapdev=visible $ZVOL
 blockdev_exists $SNAPDEV
-# 4.2 rename the snapshot and verify the devices are updated
+blockdev_exists $SNAPDEV-part1
+# 4.3 rename the snapshot and verify the devices are updated
 log_must zfs rename $SNAP $SNAP-new
 blockdev_missing $SNAPDEV
 blockdev_exists $SNAPDEV-new
-# 4.3 cleanup
+blockdev_exists $SNAPDEV-new-part1
+# 4.4 cleanup
 log_must zfs destroy $SNAP-new
 
 log_pass "ZFS volume property 'snapdev' works as expected"
