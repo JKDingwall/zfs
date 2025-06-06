@@ -1709,8 +1709,6 @@ zvol_os_rename_minor(zvol_state_t *zv, const char *newname)
 	struct device *block_dev;
 	unsigned long idx;
 
-	int readonly = get_disk_ro(zvo_disk);
-
 	ASSERT(RW_LOCK_HELD(&zvol_state_lock));
 	ASSERT(MUTEX_HELD(&zv->zv_state_lock));
 
@@ -1720,17 +1718,6 @@ zvol_os_rename_minor(zvol_state_t *zv, const char *newname)
 	zv->zv_hash = zvol_name_hash(newname);
 	hlist_del(&zv->zv_hlink);
 	hlist_add_head(&zv->zv_hlink, ZVOL_HT_HEAD(zv->zv_hash));
-
-	/*
-	 * The block device's read-only state is briefly changed causing
-	 * a KOBJ_CHANGE uevent to be issued.  This ensures udev detects
-	 * the name change and fixes the symlinks.  This does not change
-	 * ZVOL_RDONLY in zv->zv_flags so the actual read-only state never
-	 * changes.  This would normally be done using kobject_uevent() but
-	 * that is a GPL-only symbol which is why we need this workaround.
-	 */
-	set_disk_ro(zvo_disk, !readonly);
-	set_disk_ro(zvo_disk, readonly);
 
 	rcu_read_lock_sched();
 	xa_for_each(&zvo_disk->part_tbl, idx, part) {
