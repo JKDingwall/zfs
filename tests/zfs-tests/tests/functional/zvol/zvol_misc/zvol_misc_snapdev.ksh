@@ -55,6 +55,7 @@ log_onexit cleanup
 
 VOLFS="$TESTPOOL/volfs"
 ZVOL="$TESTPOOL/vol"
+ZDEV="${ZVOL_DEVDIR}/$ZVOL"
 SNAP="$ZVOL@snap"
 SNAPDEV="${ZVOL_DEVDIR}/$SNAP"
 SUBZVOL="$VOLFS/subvol"
@@ -120,15 +121,39 @@ blockdev_exists $SNAPDEV
 log_must zfs destroy $SNAP
 
 # 4. Verify "rename" is correctly reflected when "snapdev=visible"
-# 4.1 First create a snapshot and verify the device is present
+# 4.1 add a partition table to the zvol and verify devices are present
+if is_linux; then
+	typeset -r PARTSUFFIX="-part1"
+elif is_freebsd; then
+	typeset -r PARTSUFFIX="p1"
+fi
+log_must verify_partition $ZDEV
+blockdev_exists $ZDEV
+blockdev_exists $ZDEV$PARTSUFFIX
+# 4.2 create a snapshot and verify the devices are present
 log_must zfs snapshot $SNAP
 log_must zfs set snapdev=visible $ZVOL
 blockdev_exists $SNAPDEV
-# 4.2 rename the snapshot and verify the devices are updated
-log_must zfs rename $SNAP $SNAP-new
+blockdev_exists $SNAPDEV$PARTSUFFIX
+# 4.3 rename the snapshot and verify the devices are updated
+log_must zfs rename $SNAP $SNAP-sren
 blockdev_missing $SNAPDEV
-blockdev_exists $SNAPDEV-new
-# 4.3 cleanup
-log_must zfs destroy $SNAP-new
+blockdev_missing $SNAPDEV$PARTSUFFIX
+blockdev_exists $SNAPDEV-sren
+blockdev_exists $SNAPDEV-sren$PARTSUFFIX
+# 4.4 rename the zvol and verify the devices are updated
+log_must zfs rename $ZVOL $ZVOL-vren
+blockdev_missing $ZDEV
+blockdev_missing $ZDEV$PARTSUFFIX
+blockdev_missing $SNAPDEV-sren
+blockdev_missing $SNAPDEV-sren$PARTSUFFIX
+blockdev_exists $ZDEV-vren
+blockdev_exists $ZDEV-vren$PARTSUFFIX
+blockdev_exists $ZDEV-vren@snap-sren
+blockdev_exists $ZDEV-vren@snap-sren$PARTSUFFIX
+# 4.5 cleanup
+log_must zfs rename $ZVOL-vren $ZVOL
+is_linux && udev_wait
+log_must zfs destroy $SNAP-sren
 
 log_pass "ZFS volume property 'snapdev' works as expected"
