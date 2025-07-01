@@ -143,6 +143,8 @@ blockdev_exists $SNAPDEV-sren
 blockdev_exists $SNAPDEV-sren$PARTSUFFIX
 # 4.4 rename the zvol and verify the devices are updated
 log_must zfs rename $ZVOL $ZVOL-vren
+is_linux && udev_wait
+log_must find "${ZVOL_DEVDIR}"
 blockdev_missing $ZDEV
 blockdev_missing $ZDEV$PARTSUFFIX
 blockdev_missing $SNAPDEV-sren
